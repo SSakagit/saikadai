@@ -1,9 +1,27 @@
-import requests 
+from playwright.sync_api import sync_playwright
 import sqlite3
+import time
 
-url = 'https://github.com/google'
+url = 'https://github.com/orgs/google/repositories'
 
-res = requests.get(url)
+with sync_playwright() as p:
+    time.sleep(1)
+
+    browser = p.chromium.launch()
+    page = browser.new_page()
+    page.goto(url)
+    #リポジトリの取得
+    repositories = page.query_selector('h4 a').inner_text().strip()
+
+    #主要言語の取得
+    lang_elem = page.query_selector('span[class*="PrimaryLanguageName"]')
+    main_lan = lang_elem.inner_text().strip() if lang_elem else "None"
+
+    #スター数の取得
+    star_elem = page.query_selector('a:has(svg.octicon-star)')
+    stars = star_elem.inner_text().strip() if star_elem else "0"
+
+    print(f"リポジトリ:{repositories}, 主要言語: {main_lan}, スター数: {stars}")
 
 #sqlの接続
 path = './db/sai.db'
@@ -14,7 +32,7 @@ con = sqlite3.connect(path + db_name)
 
 cur = con.cursor()
 
-cur.execute("""CREATE TABLE git(id INTEGER PRIMARY KEY AUTOINCREMENT, repositories TEXT, main_lan TEXT , stars INTEGER, )""")
+cur.execute("""CREATE TABLE git(id INTEGER PRIMARY KEY AUTOINCREMENT, repositories TEXT, main_lan TEXT , stars TEXT, )""")
 con.commit()
 print('保存が完了しました')
 con.close()
