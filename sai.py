@@ -4,25 +4,6 @@ import time
 
 url = 'https://github.com/orgs/google/repositories'
 
-with sync_playwright() as p:
-    time.sleep(1)
-
-    browser = p.chromium.launch()
-    page = browser.new_page()
-    page.goto(url)
-    #リポジトリの取得
-    repositories = page.query_selector('h4 a').inner_text().strip()
-
-    #主要言語の取得
-    lang_elem = page.query_selector('span[class*="PrimaryLanguageName"]')
-    main_lan = lang_elem.inner_text().strip() if lang_elem else "None"
-
-    #スター数の取得
-    star_elem = page.query_selector('a:has(svg.octicon-star)')
-    stars = star_elem.inner_text().strip() if star_elem else "0"
-
-    print(f"リポジトリ:{repositories}, 主要言語: {main_lan}, スター数: {stars}")
-
 #sqlの接続
 path = './db/sai.db'
 
@@ -34,5 +15,43 @@ cur = con.cursor()
 
 cur.execute("""CREATE TABLE git(id INTEGER PRIMARY KEY AUTOINCREMENT, repositories TEXT, main_lan TEXT , stars TEXT, )""")
 con.commit()
-print('保存が完了しました')
+
+with sync_playwright() as p:
+    time.sleep(1)
+
+    browser = p.chromium.launch()
+    page = browser.new_page()
+    page.goto(url)
+
+    repo_elements = page.query_selector_all('li.public, li.private, #user-repositories-list li')
+
+    for repo in repo_elements:
+
+
+        #リポジトリの取得
+        repositories = page.query_selector('h4 a').inner_text().strip()
+
+        #主要言語の取得
+        lang_elem = page.query_selector('span[class*="PrimaryLanguageName"]')
+        main_lan = lang_elem.inner_text().strip() if lang_elem else "None"
+
+        #スター数の取得
+        star_elem = page.query_selector('a:has(svg.octicon-star)')
+        stars = star_elem.inner_text().strip() if star_elem else "0"
+
+        print(f"リポジトリ:{repositories}, 主要言語: {main_lan}, スター数: {stars}")
+
+        cur.execute("INSERT INTO git (repositories, main_lan, stars) VALUES (?, ?, ?)", (repositories, main_lan, stars))
+        con.commit()
+        browser.close()
+
+count = cur.execute("SELECT COUNT(*) FROM git").fetchone()[0]
+print("保存された件数:", count)
+print("保存されたデータ")
+cur.execute("SELECT * FROM git")
+rows = cur.fetchall()
+for row in rows:
+    print(row)  
+
 con.close()
+print("保存が完了しました")
