@@ -1,6 +1,10 @@
 from playwright.sync_api import sync_playwright
 import sqlite3
 import time
+
+#リポジトリ数
+TARGET_COUNT = 2945
+
 #スター数順、更新日順、名前順の5パターンで取得する（全てのリポジトリを取得するため）
 urls = [
     'https://github.com/orgs/google/repositories?sort=stargazers',
@@ -23,15 +27,17 @@ CREATE TABLE IF NOT EXISTS git (
 """)
 con.commit()
 
-MAX_PAGES = None
-
-page_num = 1
+cur.execute("SELECT repositories FROM git")
+saved_repos = {row[0] for row in cur.fetchall()}
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
 
     for target_url in urls:
+        if len(saved_repos) >= TARGET_COUNT:
+            break
+
         print(f'\n==========================================')
         print(f'取得開始: {target_url}')
         print(f'==========================================')
@@ -67,6 +73,10 @@ with sync_playwright() as p:
                 if not repo_name:
                     continue
                 repositories = repo_name.inner_text().strip()
+
+                if repositories in saved_repos:
+                    continue
+
                 #主要言語の取得
                 lang_elem = repo.query_selector('span[class*="PrimaryLanguageName"]')
                 main_lan = lang_elem.inner_text().strip() if lang_elem else "None"
@@ -78,15 +88,18 @@ with sync_playwright() as p:
                 print(f"リポジトリ:{repositories}, 主要言語: {main_lan}, スター数: {stars}")
 
                 cur.execute(
-                        'INSERT OR IGNORE INTO git (repositories, main_lan,'
-                        ' stars) VALUES (?, ?, ?)',
-                        (repositories, main_lan, stars),
-                    )
+                    'INSERT INTO git (repositories, main_lan, stars) VALUES (?, ?, ?)',
+                    (repositories, main_lan, stars),
+                )
+                saved_repos.add(repositories)
                 time.sleep(1)
+
+                if len(saved_repos) >= TARGET_COUNT:
+                    break
             con.commit()
 
             #指定ページに達したら終了
-            if MAX_PAGES and page_num >= MAX_PAGES:
+            if len(saved_repos) >= TARGET_COUNT:
                 break
             next_button = page.query_selector('a.next_page, a[rel="next"]')
             if next_button and next_button.is_visible():
